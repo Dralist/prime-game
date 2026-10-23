@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <!-- iPhone 向け: 拡大縮小を止め、ノッチ部分まで画面を使う -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <!-- ホーム画面に追加したとき全画面アプリとして起動する -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="素数ゲーム">
+  <meta name="theme-color" content="#111827">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="src/style.css?v=203224e0">
+  <title>素数ゲーム</title>
+</head>
+<body>
+  <main id="app">
+    <header class="status">
+      <span>Lv <b id="level">1</b></span>
+      <span>Turn <b id="turn">0</b></span>
+      <!-- 精算前の保留「+260 ×1.8」は得点の右に同じ行で -->
+      <span class="score"><b id="score">0</b>pt<small id="stock" class="stock"></small></span>
+      <button type="button" id="menu-btn" class="gear" aria-label="設定メニュー">⚙</button>
+    </header>
+
+    <!-- 予告欄と盤面。余った高さは上に空け、予告欄は一番上の段のすぐ上 -->
+    <div class="field">
+    <div id="preview" class="preview" aria-label="次のターンに落ちてくる数字"></div>
+    <div id="board" class="board" aria-label="盤面（下段が攻撃対象）"></div>
+    </div>
+    <p id="hits" class="hits" aria-live="polite"><span id="hit-text"></span><span id="combo-text"></span></p>
+    <p id="message" class="message" aria-live="polite">下段を左から割っていこう</p>
+
+    <div class="input">
+      <output id="input" aria-label="攻撃する数">&nbsp;</output>
+      <div id="marks-preview" class="marks-preview" aria-label="送る数の素因数マーク"></div>
+    </div>
+    <!-- 入力欄とキー帯の間の行。左詰め: エクストラだけポイント（押すと効果の一覧 #skills）と発動中の効果の残り。
+         右端: 切り替えタブ（サポート中だけ見える。OFF でも場所は取っておく） -->
+    <div class="tab-row">
+      <button type="button" id="points-btn" class="points" aria-label="効果の一覧" hidden>PP <b id="points">0</b></button>
+      <small id="active" class="active"></small>
+      <button type="button" data-key="switch" id="kbswitch" class="swkey off" aria-label="素数キーボードと数字キーボードを切り替える">数字</button>
+    </div>
+    <div class="keypad" id="keypad">
+      <!-- キー帯（常に4段分）・攻撃帯に分け、どのモードでもボタンの位置を変えない -->
+      <div class="keys">
+      <button type="button" class="digit" data-key="7">7</button>
+      <button type="button" class="digit" data-key="8">8</button>
+      <button type="button" class="digit" data-key="9">9</button>
+      <button type="button" class="digit" data-key="4">4</button>
+      <button type="button" class="digit" data-key="5">5</button>
+      <button type="button" class="digit" data-key="6">6</button>
+      <button type="button" class="digit" data-key="1">1</button>
+      <button type="button" class="digit" data-key="2">2</button>
+      <button type="button" class="digit" data-key="3">3</button>
+      <button type="button" data-key="back" id="back" aria-label="1文字消す（サポート中は最後に掛けた数を戻す）">⌫</button>
+      <button type="button" class="digit" data-key="0">0</button>
+      <button type="button" data-key="times" class="times" aria-label="打った数をいまの値に掛ける">×</button>
+      </div>
+      <div class="attack-row">
+      <button type="button" data-key="attack" class="attack">割る</button>
+      <button type="button" data-key="prime" class="prime">累乗消し</button>
+      </div>
+    </div>
+
+    <section id="overlay" class="overlay">
+      <h1>素数ゲーム</h1>
+      <p id="overlay-text" class="hint">下段の数字を左から割っていこう。<br>1 になった数字は消えて上が落ちる。<br>盤面が埋まったら負け！</p>
+      <div id="difficulty" class="difficulty" role="group" aria-label="難易度">
+        <button type="button" data-diff="easy">やさしい</button>
+        <button type="button" data-diff="normal">ふつう</button>
+        <button type="button" data-diff="hard">むずかしい</button>
+        <button type="button" data-diff="extra">エクストラ</button>
+      </div>
+      <button id="start" type="button" class="start">スタート</button>
+      <!-- 続きがあるとき（タイトルへ戻ったとき）だけ。ニューゲームは設定メニューの難易度選択（#newgame）を開く -->
+      <div id="continue" class="menu-list" hidden>
+        <button type="button" id="resume" class="start">つづきから</button>
+        <button type="button" id="title-newgame">ニューゲーム</button>
+      </div>
+      <!-- 3つのタイトルとも。設定メニューと同じルールのページを開き、戻るでタイトルへ -->
+      <button type="button" id="title-rules" class="title-rules">ルール</button>
+    </section>
+
+    <!-- 設定メニュー（⚙）: 開いているあいだは入力・攻撃を受け付けない -->
+    <section id="menu" class="overlay menu" role="dialog" aria-label="設定メニュー" hidden>
+      <div id="menu-list" class="menu-list">
+        <button type="button" data-menu="resume" class="start">つづける</button>
+        <button type="button" data-menu="newgame" class="danger">ニューゲーム</button>
+        <button type="button" data-menu="support" id="support">サポート: OFF</button>
+        <button type="button" data-menu="rules">ルール</button>
+        <button type="button" data-menu="title">タイトルへ</button>
+      </div>
+      <!-- ニューゲーム: 難易度を選ぶとその難易度で始める（いまの難易度を強調） -->
+      <div id="newgame" class="menu-list newgame" role="group" aria-label="ニューゲームの難易度" hidden>
+        <h2>ニューゲーム</h2>
+        <p class="hint warn">いまのゲームの状態（盤面・得点・ターン）は消えます。</p>
+        <button type="button" data-menu="restart" data-diff="easy">やさしい</button>
+        <button type="button" data-menu="restart" data-diff="normal">ふつう</button>
+        <button type="button" data-menu="restart" data-diff="hard">むずかしい</button>
+        <button type="button" data-menu="restart" data-diff="extra">エクストラ</button>
+        <button type="button" data-menu="back">戻る</button>
+      </div>
+      <!-- エクストラの効果の一覧（ステータス行のポイントで開く）。足りない効果と演出中は押せない -->
+      <div id="skills" class="menu-list skills" role="group" aria-label="効果の一覧" hidden>
+        <h2>効果</h2>
+        <p class="hint">大きい素数を割り取ると 1PP（消えても）。<br>使ってもターンは進まず、得点なし。</p>
+        <div id="skills-list" class="menu-list"></div>
+        <button type="button" data-menu="resume">閉じる</button>
+      </div>
+      <!-- サポートの切り替え: 確認してから変える -->
+      <div id="support-confirm" class="menu-list confirm" role="group" aria-label="サポートの切り替えの確認" hidden>
+        <h2 id="support-question">サポートを ON にしますか？</h2>
+        <p class="hint">ON にすると各マスに素因数がマークで出て、テンキーが素数キーボードに変わります。</p>
+        <button type="button" data-menu="support-apply" class="start">変更する</button>
+        <button type="button" data-menu="back">戻る</button>
+      </div>
+      <!-- ルール: ページ送り（開くたびに 1 ページ目。ページ番号は main.js が .rule-page の数から出す） -->
+      <div id="rules" class="rules" hidden>
+        <section class="rule-page">
+          <h2>目的と負け</h2>
+          <ul>
+            <li>積み上がった数字を<b>下の段から</b>崩していくターン制のパズル。</li>
+            <li>攻撃できるのは各列の<b>一番下の数字</b>だけ。</li>
+            <li>数字は 1 になると消え、上の数字が1つ落ちる。</li>
+            <li>ターンが進むと上から数字が降ってくる。落ちたあとに<b>全マスが埋まったら負け</b>。</li>
+          </ul>
+        </section>
+        <section class="rule-page" hidden>
+          <h2>割る</h2>
+          <ul>
+            <li>数を入力して<b>割る</b>。素因数ごとに指数の数だけ弾を持つ（16 = 2⁴ なら 2 の弾が 4）。</li>
+            <li>下段を<b>左から順に</b>、数字が持つ分だけ割っていく。</li>
+            <li>数字が消えなかったら、その数字が持つ個数より多い弾は<b>1つ減る</b>。割らずに通り抜けた弾も1つ減る。</li>
+            <li>数字を<b>消したときはどの弾も減らない</b>（12 で [4, 3] は両方消える）。</li>
+            <li>割れない数字でも止まらない。弾がなくなったら終わり。</li>
+            <li>例: 8 で [2, 4, 6] → 2 と 4 は消え、6 は 3 に。</li>
+          </ul>
+        </section>
+        <section class="rule-page" hidden>
+          <h2>累乗消し</h2>
+          <ul>
+            <li><b>累乗消し</b>を押すと、下段の<b>素因数が1種類の数字</b>（2, 4, 8, 9, 25 など）をすべて消す。</li>
+            <li>回数は無制限。ただし1ターン使う。</li>
+            <li>ときどき降ってくる大きい素数（やさしいなら 11〜97）も、数字キーボードで打つか累乗消しで消せる。</li>
+          </ul>
+        </section>
+        <section class="rule-page" hidden>
+          <h2>ターンと予告</h2>
+          <ul>
+            <li>攻撃は当たっても外れても<b>1ターン</b>。</li>
+            <li>割るで下段の全部に当たったとき、累乗消しで下段が全部消えたときは<b>ターンが進まない</b>。</li>
+            <li>次に降る列と数字は盤面の上の<b>予告欄</b>に出る。その列が満杯なら近くの空いている列に落ちる。</li>
+            <li>9 ターンごとにレベルが上がり、降る数と敵の素因数が増える（Lv 5 で止まる）。エクストラは Lv 5 から 100 ターンで Lv 7、さらに 30 ターンで Lv 10 まで少しずつ上がる。</li>
+          </ul>
+        </section>
+        <section class="rule-page" hidden>
+          <h2>All HIT・Combo</h2>
+          <ul>
+            <li>数字が消えることを<b>ブレイク</b>という。攻撃ごとに点を積み立てる: 素数で1回割るごとに下の表の点、ブレイクしたら ＋50（4 を消すと 10＋10＋50 = 70）。</li>
+          </ul>
+          <table class="rule-table">
+            <tr><th>素数</th><td>2</td><td>3</td><td>5</td><td>7</td><td>11</td><td>13</td><td>17</td><td>19</td><td>23</td></tr>
+            <tr><th>点</th><td>10</td><td>16</td><td>23</td><td>28</td><td>35</td><td>37</td><td>41</td><td>42</td><td>45</td></tr>
+          </table>
+          <ul>
+            <li>ターンが進むと、積み立てに倍率を掛けて得点に入る。そのターンに<b>消した数が多いほど</b>倍率が上がり（最大 ×3）、レベルが高いほど少し増える。それまでは得点の横に「+260 ×1.8」と出る。</li>
+            <li>当たったマスの数が「3 HIT」のように出る。下段に全部当たると<b>All HIT!</b>でターンが進まず、同じターンに積み立てを続けられる。続けると「2 Combo」…（点にはかからない）。</li>
+          </ul>
+        </section>
+        <section class="rule-page" hidden>
+          <h2>全消しの点</h2>
+          <ul>
+            <li>攻撃のあと数字が落ち終わって、数字のある列が<b>1列以下</b>なら全消し。</li>
+            <li>全消しのターンはブレイク倍率が固定。盤面が空: <b>No line Reset ×5</b>。1列だけ残り: <b>One line Reset ×3</b>（はじける残りもブレイクとして積み立てに入る）。</li>
+            <li>「One line Reset +1234」のように、そのターンに入った点が出る。</li>
+            <li>全消しのあとは Combo が 0 に戻り、すぐ2段補充される。</li>
+          </ul>
+        </section>
+        <section class="rule-page" hidden>
+          <h2>エクストラ</h2>
+          <ul>
+            <li>Lv 5 から始まり、100 ターンで Lv 7、さらに 30 ターンで Lv 10 まで少しずつ上がる（降る数が増える分、大きい素数は混ざりにくくなる）。</li>
+            <li><b>PP</b>（Prime point）をためる: 大きい素数を割り取ると 1PP（消えなくても）。One line Reset では、残った数字のうち大きい素数入りの数だけ。</li>
+            <li>「PP n」のボタンで<b>効果</b>を使う。PP を払い、ターンは進まず点も入らない。</li>
+            <li>下段一掃（3PP）: 下段の数字をすべて消す</li>
+            <li>予告の引き直し（1PP）: 予告の列と数字を引き直す</li>
+            <li>大きい素数崩し（1PP）: 盤面の大きい素数をすべて割り取る（PP なし）</li>
+            <li>落下止め（2PP）: 2ターンの間、数字が落ちてこない</li>
+            <li>得点2倍（2PP）: 3ターンの間、入る点が2倍（いまの保留も）</li>
+          </ul>
+        </section>
+        <section class="rule-page" hidden>
+          <h2>サポート</h2>
+          <ul>
+            <li>⚙ のメニューの<b>サポート</b>で ON/OFF（確認で「変更する」）。得点は変わらない。</li>
+            <li>各マスに素因数が形のマークで出る（2=● 3=▲ 5=■ 7=◆ 11=★ 13=✚ 17=♥ 19=♠ 23=♣、大きい素数は ◎。12 = ●●▲）。</li>
+            <li>テンキーは<b>素数キーボード</b>に。押すたびに掛け算（2 → 3 → 2 で 12）、⌫ で最後の素数を戻す。</li>
+            <li>入力欄とキーボードの間・右端のタブ「数字」「素数」でキーボードを切り替え。数字側は打った数を「×」で掛ける。</li>
+          </ul>
+        </section>
+        <div class="rules-nav">
+          <button type="button" data-menu="rules-prev">前へ</button>
+          <span id="rules-page">1/8</span>
+          <button type="button" data-menu="rules-next">次へ</button>
+        </div>
+        <button type="button" data-menu="back">戻る</button>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="src/main.js?v=203224e0"></script>
+</body>
+</html>

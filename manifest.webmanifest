@@ -1,0 +1,9 @@
+{
+  "name": "素数ゲーム",
+  "short_name": "素数ゲーム",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#111827",
+  "theme_color": "#111827"
+}

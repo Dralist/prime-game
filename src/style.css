@@ -1,0 +1,446 @@
+:root {
+  --bg: #111827;
+  --fg: #f9fafb;
+  --accent: #f59e0b;
+  --muted: #9ca3af;
+  --panel: #1f2937;
+  --danger: #ef4444;
+  --max: #facc15; /* 保留のブレイク倍率 3・One line Reset */
+  --noline: #22d3ee; /* 保留の No line・No line Reset */
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  /* iPhone でのダブルタップ拡大・長押しメニュー・選択を抑える */
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#app {
+  position: relative;
+  height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* ノッチ・ホームバーを避ける */
+  padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 12px);
+  text-align: center;
+  /* 累乗消しの光・弾が盤面の外へ出てもページをはみ出させない（左右の余白の中では見える） */
+  overflow: hidden;
+  overflow: clip;
+}
+
+h1 { margin: 0; font-size: 2rem; }
+.hint { margin: 0; color: var(--muted); line-height: 1.6; }
+
+/* 得点表示は左に詰め、右端に設定メニューの ⚙ */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+.status b { color: var(--fg); font-size: 1.27em; } /* 収まらないときは main.js の fitStatus が行の文字を小さくする */
+/* 「99213pt」の pt と、精算前の保留「+260 ×1.8」（得点の右に同じ行・黄系。桁が増えても折り返さない） */
+.status .score { white-space: nowrap; }
+.status .stock { display: inline-block; margin-left: 0.35em; font-size: 0.77em; color: var(--fg); transform-origin: left center; }
+/* 保留の式が出る/計算されるとき（effects.js の setStock） */
+.status .stock.max { color: var(--max); }
+.status .stock.noline { color: var(--noline); }
+.status .stock.pulse { animation: stock-pulse 0.35s ease-out; }
+@keyframes stock-pulse { 40% { transform: scale(1.25); } }
+.status .gear {
+  flex: none;
+  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+/* 設定メニュー: 開始画面と同じ重ね方 */
+.menu-list { display: flex; flex-direction: column; gap: 12px; width: min(100%, 260px); }
+.menu-list button, .rules button {
+  padding: 14px 0;
+  border: none;
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+.menu-list .start { padding: 14px 0; }
+.menu-list .danger { background: var(--danger); }
+.newgame .warn { text-align: center; color: var(--danger); }
+.rules { display: grid; gap: 12px; max-height: 100%; overflow-y: auto; text-align: left; line-height: 1.6; }
+.rules[hidden], .menu-list[hidden] { display: none; }
+/* 効果の一覧: ボタンは2行（名前・右に cost / 小さく薄い説明）。一覧はオーバーレイの縦中央 */
+.skills { width: min(100%, 320px); gap: 10px; }
+.skills h2 { margin: 0; text-align: center; }
+.skills > .hint { font-size: 0.85rem; line-height: 1.5; text-align: center; }
+#skills-list { width: 100%; gap: 8px; }
+#skills-list button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 10px 14px;
+  text-align: left;
+}
+.skill-name { font-size: 1.1rem; }
+.skill-cost { font-size: 1rem; color: var(--accent); }
+.skill-desc { grid-column: 1 / -1; font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+#skills-list button:disabled > span { opacity: 0.35; } /* 背景は不透明のまま、文字だけ薄く */
+.newgame h2, .confirm h2 { margin: 0; text-align: center; }
+.confirm h2 { font-size: 1.2rem; }
+.newgame button[data-diff] { border: 2px solid var(--panel); }
+.newgame button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.rules h2 { margin: 0 0 12px; text-align: center; }
+.rules ul { margin: 0; padding-left: 1.2em; color: var(--muted); }
+.rules li + li { margin-top: 6px; }
+.rules b { color: var(--fg); }
+.rule-table { width: 100%; margin: 8px 0; border-collapse: collapse; text-align: center; font-size: 0.85em; color: var(--muted); }
+.rule-table th, .rule-table td { padding: 2px 0; border-bottom: 1px solid var(--muted); }
+.rule-table th { color: var(--fg); font-weight: normal; white-space: nowrap; padding-right: 4px; }
+/* ルールのページ送り: オーバーレイの縦中央。全ページを同じマスに重ね、隠すページも高さだけ残す
+   → 本文の高さは一番長いページで固定され、ページを送っても見出し・ボタンの位置は動かない。
+   収まらなければ .rules の中でスクロール（max-height: 100%） */
+.rules { width: min(100%, 360px); grid-template-columns: 100%; }
+.rule-page { grid-row: 1; grid-column: 1; }
+.rule-page[hidden] { display: block; visibility: hidden; }
+.rules-nav { grid-row: 2; }
+.rules-nav { display: flex; align-items: center; gap: 12px; }
+.rules-nav button { flex: 1; }
+.rules-nav button:disabled { opacity: 0.35; }
+.rules-nav span { min-width: 3em; text-align: center; color: var(--muted); }
+
+/* 予告欄＋盤面の場所。余った高さを受け持ち、中身は下寄せ（予告欄は一番上の段のすぐ上）。
+   1マスは正方形で、辺は「幅を 5列で割った大きさ」と「残りの高さを段数で割った大きさ」の小さい方（--cols, --rows は main.js が入れる） */
+.field {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  container-type: size;
+}
+.field > * {
+  /* マスは横長でよい: 幅は列数で横いっぱい、高さは残りの高さ÷段数（幅より高くはしない） */
+  --cell-w: calc((100cqw - (var(--cols, 5) - 1) * 6px) / var(--cols, 5));
+  --cell-h: max(32px, min(var(--cell-w), (100cqh - 2rem - 8px - (var(--rows, 6) - 1) * 6px) / var(--rows, 6))); /* 32px より低くしない */
+}
+/* 盤面: 難易度ごとの列×段を中央に寄せる。下段（攻撃対象）を目立たせる */
+.board {
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 5), var(--cell-w));
+  grid-template-rows: repeat(var(--rows, 6), var(--cell-h));
+  justify-content: center;
+  gap: 6px;
+  isolation: isolate;
+}
+/* 点線のスロット: 全マスの場所に常に敷く（drawBoard）。数字マスの背景の下に隠れ、空きマスや落下・はじけの途中に見える */
+.frame { z-index: -1; border-radius: 10px; border: 1px dashed #374151; pointer-events: none; }
+.cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: min(1rem, var(--cell-h) * 0.7); /* 背の低いマスでも数字が切れない */
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cell.empty { background: transparent; }
+.cell.bottom { background: var(--accent); color: var(--bg); box-shadow: 0 0 0 2px var(--fg); }
+.cell.bottom.empty { background: transparent; box-shadow: none; }
+/* サポートモード: 数字の下に素因数のマーク（形と個数）。多いときは小さくして折り返し、マスに収める */
+.cell { flex-direction: column; overflow: hidden; }
+.cell .marks { display: none; }
+.board.support .cell .marks {
+  display: block;
+  max-width: 100%;
+  padding: 0 2px;
+  font-size: 0.6rem;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  text-align: center;
+  word-break: break-all;
+}
+.board.support .cell .marks.small { font-size: 0.48rem; }
+.board.support .cell .marks.tiny { font-size: 0.4rem; }
+.board.support .cell .num { line-height: 1.15; }
+
+/* 予告欄: 次のターンに落ちてくる列と数字 */
+.preview {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 5), var(--cell-w));
+  justify-content: center;
+  gap: 6px;
+  height: 2rem;
+  flex: none;
+}
+.slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  border-radius: 8px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.slot.next {
+  border: 2px dashed var(--danger);
+  color: var(--danger);
+  animation: blink 1s ease-in-out infinite alternate;
+}
+.slot.next::after { content: "▼"; margin-left: 2px; font-size: 0.7em; }
+@keyframes blink { to { opacity: 0.5; } }
+
+/* 割り算エフェクト（main.js の EFFECT_MS = 0.55s と合わせる） */
+.cell.hit { animation: flash 0.55s ease-out; }
+@keyframes flash { 0% { filter: brightness(1.8); } 100% { filter: none; } }
+.badge {
+  position: absolute;
+  z-index: 4;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: rise 0.55s ease-out both;
+}
+
+/* 貫通する弾: 下段を左から飛び、残りの攻撃の数を表示する */
+.bullet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  min-width: 2.2em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #6366f1;
+  color: var(--fg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 12px #818cf8;
+  pointer-events: none;
+}
+/* 弾が届くまでは見せない（delay 中は from が効く）。届いたら薄くならずに攻撃の終わりまで残る */
+@keyframes rise {
+  from { transform: translate(-50%, -0.2em); opacity: 0; }
+  1% { opacity: 1; }
+  to { transform: translate(-50%, -1.4em); opacity: 1; }
+}
+/* エクストラ: 大きい素数を割り取ったマスの「+1PP」（PP ボタンと同じ地の色。マスの下側から浮く） */
+.pp-float {
+  position: absolute;
+  z-index: 4;
+  padding: 0 6px;
+  border: 1px solid var(--muted);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: pp-rise 0.55s ease-out both;
+}
+@keyframes pp-rise {
+  from { transform: translate(-50%, -0.6em); opacity: 0; }
+  1% { opacity: 1; }
+  to { transform: translate(-50%, -1.8em); opacity: 1; }
+}
+/* はじける: 薄くはならずに縮んで消える */
+.cell.pop { animation: pop 0.55s ease-in both; }
+@keyframes pop {
+  40% { transform: scale(1.2); }
+  100% { transform: scale(0); }
+}
+/* 割れずに弾が通り抜けた */
+.cell.pass { animation: shake 0.4s linear; }
+@keyframes shake {
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+.cell.bump { animation: bump 0.35s ease-out; }
+@keyframes bump { 50% { transform: scale(1.15); } }
+
+/* 落下: --fall 段分だけ上から落ちてくる（マスの高さ + 隙間 6px）。
+   時間は段数によらず --fall-ms（main.js の FALL_MS）。止まる瞬間がわかる ease-out */
+.cell.fall { animation: fall var(--fall-ms, 420ms) ease-out; }
+@keyframes fall {
+  from { transform: translateY(calc(var(--fall) * (-100% - 6px))); }
+}
+
+.message { margin: 0; height: 1.5em; line-height: 1.5em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+
+.input output {
+  display: block;
+  height: calc(2rem * 1.25 + 8px);
+  line-height: 1.25;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--panel);
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* キーパッドは2つの帯。キー帯は3列×常に4段（足りない段は空き）、攻撃帯は2つ横並び */
+.keypad { display: flex; flex-direction: column; gap: 8px; }
+.keypad .keys { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 3rem); gap: 8px; }
+.keypad .attack-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.keypad button {
+  padding: 10px 0;
+  border: none;
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+.keypad button:active { transform: scale(0.96); filter: brightness(1.3); }
+.keypad .attack, .keypad .prime { padding: 14px 0; font-size: 1.3rem; }
+.keypad .attack { background: var(--accent); color: var(--bg); }
+.keypad .prime { background: #6366f1; }
+/* 背の低い画面（Safari のバー込みの iPhone など）はキーを低くして盤面に高さを回す */
+@media (max-height: 760px) {
+  #app { padding-top: calc(env(safe-area-inset-top) + 4px); padding-bottom: calc(env(safe-area-inset-bottom) + 4px); }
+  .keypad, .keypad .keys, .keypad .attack-row { gap: 5px; }
+  .keypad .keys { grid-template-rows: repeat(4, 2.1rem); }
+  .keypad button { padding: 4px 0; font-size: 1.4rem; }
+  .keypad .attack, .keypad .prime { padding: 6px 0; font-size: 1.2rem; }
+  .input output { height: calc(1.5rem * 1.25 + 8px); font-size: 1.5rem; }
+  /* 後ろにある .factors / .product の行の高さ（2rem 前提）に勝つよう #app を付ける */
+  #app .input output.factors, #app .input output.product { font-size: 1.1rem; line-height: calc(1.5rem * 1.25); }
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 16px;
+  background: rgb(17 24 39 / 0.94);
+}
+.overlay[hidden] { display: none; }
+.overlay { z-index: 10; } /* 弾・光より上。設定メニューは DOM の後ろなので開始画面より上 */
+.start {
+  padding: 16px 48px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.title-rules { padding: 10px 32px; border: 2px solid var(--panel); border-radius: 999px; background: none; color: var(--fg); font-size: 1rem; font-weight: 700; }
+.difficulty { display: flex; gap: 8px; }
+.difficulty[hidden] { display: none; }
+.difficulty button {
+  padding: 12px 14px;
+  border: 2px solid var(--panel);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 1rem;
+  font-weight: 700;
+}
+.difficulty button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+/* 攻撃中に入力欄へ出す素因数分解（4桁でも1行に収まる大きさ） */
+.input output.factors { font-size: 1.3rem; line-height: calc(2rem * 1.25); color: var(--accent); }
+
+/* 累乗消しの光: 下段を左から右へ走る（main.js の sweep） */
+.beam {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  border-radius: 12px;
+  background: linear-gradient(90deg, transparent, rgb(165 180 252 / 0.85) 50%, transparent);
+  box-shadow: 0 0 24px #818cf8;
+  pointer-events: none;
+}
+.badge.prime { background: #6366f1; color: var(--fg); box-shadow: 0 0 8px #818cf8; }
+
+/* HIT / All HIT / Combo（攻撃のエフェクトが終わったら出す。高さは固定） */
+.hits {
+  margin: 0;
+  height: 1.6rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  font-size: 1.3rem;
+  font-weight: 800;
+  line-height: 1;
+}
+#hit-text { color: var(--fg); }
+#hit-text.all { color: var(--accent); }
+#hit-text.reset { color: var(--max); font-size: 1.6rem; white-space: nowrap; }
+#hit-text.reset.noline { color: var(--noline); }
+#hit-text.over { color: var(--danger); }
+#turn.over { color: var(--danger); }
+#combo-text { color: #f472b6; }
+.hits .show { animation: hit-in 0.3s ease-out; }
+@keyframes hit-in { from { transform: scale(1.6); opacity: 0; } }
+
+/* サポートモードの素数キーボード: テンキーの代わりに出てくる素数を出す（main.js の buildPrimeKeys） */
+.keypad.support-mode .digit, .keypad:not(.support-mode) .pkey { display: none; }
+.keypad .pkey { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.keypad .pkey .pmark { font-size: 1rem; color: var(--muted); }
+.keypad .pkey:disabled { opacity: 0.25; text-decoration: line-through; }
+.input output.product { font-size: 1.3rem; line-height: calc(2rem * 1.25); }
+/* サポートモードの数字キーボード（.num-mode）と切り替えボタン */
+.keypad.num-mode .digit { display: block; }
+.keypad.num-mode .pkey, .keypad:not(.num-mode) .times { display: none; }
+/* 入力欄とキー帯の間・右端の切り替えボタン（四隅丸い独立したボタン）。マークのプレビューの行に重ね、
+   入力欄・キー帯のどちらとも 6px 空ける（#app の gap 8px を負のマージンで詰める。
+   増える高さは 32px − 1.2rem − 4px だけ）。サポート OFF でも場所は取っておく */
+.input .marks-preview { padding: 0 4.5rem; }
+.tab-row { display: flex; gap: 8px; align-items: flex-end; height: 32px; margin: calc(-1.2rem - 2px) 0 -2px; pointer-events: none; }
+.swkey { pointer-events: auto; width: 4.5rem; height: 32px; padding: 0; border: none; border-radius: 12px; background: var(--panel); color: var(--muted); font-size: 0.9rem; font-weight: 700; }
+.swkey:active { filter: brightness(1.3); }
+.swkey.off { visibility: hidden; }
+.tab-row .swkey { margin-left: auto; }
+/* エクストラのポイント（押すと効果の一覧）と、その右に数ターン続く効果の残り（効果ごとのチップ [止 残2] [×2 残3]。左詰め） */
+.tab-row .points { pointer-events: auto; height: 32px; padding: 0 10px; border: none; border-radius: 12px; background: var(--panel); color: var(--muted); font-size: 0.9rem; font-weight: 700; white-space: nowrap; }
+.tab-row .points b { color: var(--fg); font-size: 1.1rem; }
+.tab-row .points:active { filter: brightness(1.3); }
+.tab-row .active { align-self: center; display: flex; gap: 6px; font-size: 0.85rem; color: var(--fg); white-space: nowrap; }
+.tab-row .active .chip { display: inline-flex; align-items: baseline; gap: 5px; box-sizing: border-box; height: 24px; line-height: 22px; padding: 0 7px; border: 1px solid var(--muted); border-radius: 8px; }
+.tab-row .active .chip-left { font-size: 0.7rem; color: var(--muted); }
+/* 送る数のマーク（サポートモード中だけ中身が入る。空でも高さは変わらない） */
+.marks-preview { height: 1.2rem; line-height: 1.2rem; font-size: 0.9rem; color: var(--muted); letter-spacing: 1px; overflow: hidden; white-space: nowrap; }
