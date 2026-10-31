@@ -17,8 +17,8 @@ export const EXTRA_START_LEVEL = 5; // エクストラの開始レベル
 export const EXTRA_MID_LEVEL = 7; // エクストラが EXTRA_RAMP_TURNS ターンで上がりきる途中のレベル（素因数の個数はここで上限）
 export const EXTRA_RAMP_TURNS = 100; // エクストラが EXTRA_START_LEVEL から EXTRA_MID_LEVEL まで小数で上がるターン数
 export const EXTRA_MAX_LEVEL = 10; // エクストラのレベルの上限（落下の最大数が列数に届く）
-export const EXTRA_RAMP2_TURNS = 30; // そのあと EXTRA_MID_LEVEL から EXTRA_MAX_LEVEL まで小数で上がるターン数
-export const OVER_TURN = 100; // このターンを超えたら Over turn（全難易度共通。ターン数を赤に、超えたときに1回知らせる）
+export const EXTRA_RAMP2_TURNS = 50; // そのあと EXTRA_MID_LEVEL から EXTRA_MAX_LEVEL まで小数で上がるターン数
+export const OVER_TURN = 100; // エクストラはこのターンを超えたら Over turn（ターン数を赤に、超えたときに1回知らせる）。ほかの難易度は超えたらクリア
 export const BIG_PRIME_CAP_LEVEL = 7; // 大きい素数の 1ターンあたりの期待個数はこのレベルの値で頭打ち（落下が多いほど確率を下げる）
 
 export const DIFFICULTIES = {
@@ -321,6 +321,10 @@ export function isEmpty(board) {
 export function isCleared(board) {
   return board.filter((col) => col.length > 0).length <= 1;
 }
+
+// エクストラ以外は OVER_TURN を超えたら（101 になる落下・全消しの補充のあと）クリア。エクストラは終わらず Over turn に入る
+export const isClearTurn = (turn, difficulty) => !DIFFICULTIES[difficulty]?.extra && turn > OVER_TURN;
+export const isOverTurn = (turn, difficulty) => !!DIFFICULTIES[difficulty]?.extra && turn > OVER_TURN;
 
 export function isFull(board, difficulty) {
   const { cols, rows } = DIFFICULTIES[difficulty];

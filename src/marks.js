@@ -1,6 +1,6 @@
 // サポートモードで素因数を表すマーク。色ではなく形で区別する（018・019 でも使う）
 // 末尾の ︎ は iPhone で絵文字にならず文字として出すため
-import { factorize, DIFFICULTIES } from "./game.js?v=203224e0";
+import { factorize, DIFFICULTIES } from "./game.js?v=d429c0b8";
 
 export const MARKS = {
   2: "●",

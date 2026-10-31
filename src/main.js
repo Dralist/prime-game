@@ -1,15 +1,18 @@
 // 画面とゲームのルール（game.js）をつなぐ。ターン制（時間では進まない）
 import {
   DIFFICULTIES, maxLevel, maxAttack, numberAttack, primeAttack,
-  OVER_TURN, levelAt, initialBoard, planDrops, isFull, isCleared, isEmpty, blockedPrimes,
-} from "./game.js?v=203224e0";
-import { marksFor, setMarkDifficulty } from "./marks.js?v=203224e0";
+  isOverTurn, isClearTurn, OVER_TURN, levelAt, initialBoard, planDrops, isFull, isCleared, isEmpty, blockedPrimes,
+} from "./game.js?v=d429c0b8";
+import { marksFor, setMarkDifficulty } from "./marks.js?v=d429c0b8";
 import {
   SETTLE_PAUSE_MS, EFFECT_MS, FALL_MS, wait, formatFactors, drawBoard, drawPreview, primeKeyButtons, numberFx, primeFx,
-  arriveNumber, arrivePrime, setLabel, setStock, fitStatus, showHits, showReset, showOverTurn, shoot, sweep,
-} from "./effects.js?v=203224e0";
-import { EXTRA_SKILLS, pointCols, resetCells, resetPoints, renderSkills, castSkill, nextTurn, renderActive, scoreFactor } from "./extra.js?v=203224e0";
-import { Tally } from "./score.js?v=203224e0";
+  arriveNumber, arrivePrime, setLabel, setStock, fitStatus, showHits, showReset, showOverTurn, clearFx, shoot, sweep, loseFx, showSignals,
+} from "./effects.js?v=d429c0b8";
+import { EXTRA_SKILLS, pointCols, resetCells, resetPoints, renderSkills, castSkill, nextTurn, renderActive, scoreFactor } from "./extra.js?v=d429c0b8";
+import { Tally } from "./score.js?v=d429c0b8";
+import { addRecord, initRecords } from "./records.js?v=d429c0b8";
+import { Stats, showResult, endResult } from "./stats.js?v=d429c0b8";
+import { showRule, turnRule } from "./rules.js?v=d429c0b8";
 
 const STORAGE_KEY = "prime-game-difficulty";
 const SUPPORT_KEY = "prime-game-support"; // サポートモード（素因数マーク）の ON/OFF
@@ -27,12 +30,10 @@ const inputEl = $("input");
 const messageEl = $("message");
 const hitTextEl = $("hit-text");
 const comboTextEl = $("combo-text");
-const levelEl = $("level");
-const turnEl = $("turn");
+const levelEl = $("level"), turnEl = $("turn");
 const scoreEl = $("score"), stockEl = $("stock"), statusEl = document.querySelector(".status");
 const pointsEl = $("points"), pointsBtn = $("points-btn"), activeEl = $("active");
-const overlay = $("overlay");
-const overlayText = $("overlay-text");
+const overlay = $("overlay"), overlayText = $("overlay-text");
 const startBtn = $("start");
 const diffButtons = [...document.querySelectorAll("#difficulty button")];
 // 開始画面と設定メニューのニューゲームの難易度ボタン（どちらもいまの難易度を強調）
@@ -52,7 +53,7 @@ for (const b of diffButtons) b.addEventListener("click", () => setDifficulty(b.d
 showDifficulty();
 
 // サポートモード: マークは常に描画しておき、盤面の .support で見せる（演出中に切り替えても描き直さない）
-let support = false;
+let support = false, usedSupport = false; // usedSupport: このゲーム中に一度でも ON にしたか（記録の「S」）
 try { support = localStorage.getItem(SUPPORT_KEY) === "1"; } catch { /* 保存できなくても OFF で動く */ }
 const supportBtn = $("support");
 const keypadEl = $("keypad");
@@ -85,7 +86,7 @@ function toggleSupport() {
   picked = [];
   typed = "";
   numPad = false;
-  if (support) input = "";
+  if (support) [input, usedSupport] = ["", usedSupport || playing]; // 遊んでいる間に一度でも ON → 記録は「サポート」
   showSupport();
   showInput();
 }
@@ -97,9 +98,10 @@ let board = emptyBoard();
 let drops = []; // 次のターンに落ちてくる数字 [{ col, value }]
 let input = "";
 let factors = ""; // 攻撃中に入力欄へ出す素因数分解（入力が空のときだけ見せる）
-let tally = new Tally(5); // 得点・精算までの積み立てとブレイク数（score.js）
+let tally = new Tally(5), stats = new Stats(); // 得点・精算までの積み立てとブレイク数（score.js）・結果の集計（stats.js）
 let points = 0; // エクストラのポイント（大きい素数を割り取ると +1。効果に使う）
 let active = {}; // 数ターン続く効果の残り { id: ターン数 }（extra.js の nextTurn で減る）
+let uses = {}; // 効果を使った記録 { id: { turn, chain } }（続けて使うと cost が上がる。extra.js の priceOf）
 let turn = 0;
 let combo = 0; // All HIT が続いた回数（表示だけ。All HIT でない攻撃で 0 に戻る）
 let playing = false;
@@ -134,14 +136,16 @@ function render(fx = {}) {
   scoreEl.textContent = tally.score;
   setStock(stockEl, tally.display(), tally.tone()); // 攻撃〜落下開始は式、落下からは計算後。色は倍率の段階
   turnEl.textContent = turn;
-  turnEl.classList.toggle("over", turn > OVER_TURN); // Over turn は赤（つづきからでも）
+  turnEl.classList.toggle("over", isOverTurn(turn, difficulty)); // エクストラの Over turn は赤（つづきからでも）
   const level = levelAt(turn, difficulty); // エクストラは小数なので整数部分を出す
   levelEl.textContent = level >= maxLevel(difficulty) ? `${Math.floor(level)} MAX` : Math.floor(level);
   pointsBtn.hidden = !size().extra;
   pointsEl.textContent = points;
   renderActive(activeEl, active);
   fitStatus(statusEl, stockEl);
+  signals(); // 埋まる直前（攻撃〜予告が落ちるまでは出さない）・Over turn 中（タイトルでは出さない）の合図（effects.js）
 }
+const signals = () => showSignals({ board, drops, active, rows: size().rows, waiting: playing && !(pending?.step < 2), over: playing && overlay.hidden && isOverTurn(turn, difficulty) });
 
 function start() {
   game++;
@@ -151,27 +155,28 @@ function start() {
   setMarkDifficulty(difficulty);
   board = initialBoard(difficulty);
   drops = planDrops(board, levelAt(0, difficulty), difficulty);
-  input = "";
-  picked = [];
-  typed = "";
-  factors = "";
-  tally = new Tally(size().cols);
-  points = 0;
+  [input, picked, typed, factors] = ["", [], "", ""];
+  [tally, stats] = [new Tally(size().cols), new Stats()];
+  [points, usedSupport] = [0, support];
   active = {};
+  uses = {};
   turn = 0;
   playing = true;
   busy = false;
   pending = null;
   overlay.hidden = true;
+  endResult(overlay);
   messageEl.textContent = "下段を左から割っていこう";
   render({ fall: (c, r) => size().rows - r });
 }
 
-function gameOver() {
-  playing = false;
-  pending = null;
+// 負け・クリア（clear。記録のターンは OVER_TURN）で終わる
+function gameOver(clear = false) {
+  [playing, pending] = [false, null];
   showTitle();
-  overlayText.textContent = `盤面が埋まった！ 得点 ${tally.score}・${turn} ターン到達`;
+  const end = { score: tally.score, turn: clear ? OVER_TURN : turn, clear };
+  const rank = addRecord(difficulty, { ...end, support: usedSupport }); // 0 = 圏外
+  showResult(overlayText, { ...end, rank, difficulty, stats, extra: size().extra, records: $("title-records") });
   startBtn.textContent = "もう一度";
   overlay.hidden = false;
 }
@@ -205,7 +210,8 @@ async function settle(next, shift, bump, advance, text, id) {
     render({ fall: (c, r) => (landed.has(`${c},${r}`) ? size().rows - r : 0) });
     if (isFull(board, difficulty)) {
       tally.cashIn(level);
-      gameOver();
+      [pending.lost, playing] = [true, false]; // 演出中は入力・攻撃を受けず、タイトルへ戻っても負け（finishNow）
+      if (await loseFx(boardEl, () => id === game)) gameOver(); // 満杯の盤面を見せてから結果へ
       return;
     }
     await wait(FALL_MS);
@@ -213,7 +219,10 @@ async function settle(next, shift, bump, advance, text, id) {
   }
   if (isCleared(board)) await resetBoard(id, level);
   else if (advance) { tally.cashIn(level); render(); }
-  if (advance && turn === OVER_TURN + 1 && id === game) showOverTurn(hitTextEl); // 100 → 101 の1回だけ（Reset のあと）
+  if (!advance || turn !== OVER_TURN + 1 || id !== game) return; // 100 → 101 の1回だけ（Reset のあと）
+  if (!isClearTurn(turn, difficulty)) return showOverTurn(hitTextEl, boardEl, turnEl);
+  [pending.won, playing] = [true, false]; // クリア: 演出中は入力・攻撃を受けず、タイトルへ戻ってもクリア（finishNow）
+  if (await clearFx(hitTextEl, boardEl, turnEl, () => id === game)) gameOver(true);
 }
 
 // 全消し: 残りもブレイクとして積み立て、倍率を固定して精算（Reset 表示は精算した点）、Combo は 0 に。
@@ -222,6 +231,7 @@ function resetScore(level) {
   const gained = tally.reset(board, level);
   if (size().extra) points += resetPoints(board, difficulty);
   combo = 0;
+  stats.reset(board); // settle・finishNow のどちらからも1回だけ通る
   messageEl.textContent = "2段補充・Combo は 0 から";
   showReset(hitTextEl, comboTextEl, isEmpty(board), gained);
 }
@@ -253,6 +263,7 @@ async function fire() {
   picked = [];
   typed = "";
   const r = numberAttack(board, n);
+  stats.attack(r, board);
   combo = r.allHit ? combo + 1 : 0; // 全消しは settle の判定で 0 に戻す
   tally.attack(board, r.board, scoreFactor(active)); // 得点へは精算で足す
   const pp = size().extra ? pointCols(board, r, difficulty) : []; // 大きい素数を割り取ったマス（+1PP ずつ）
@@ -273,15 +284,14 @@ async function fire() {
   factors = "";
   showHits(hitTextEl, comboTextEl, r.hits, r.allHit, combo); // 全消しなら settle で Reset に置き換える
   await settle(r.board, [...fx.pop], bump, !r.allHit, text, id);
-  if (id === game) [busy, pending] = [false, null];
+  if (id === game) { [busy, pending] = [false, null]; signals(); } // 入力待ちに戻ったら合図を付け直す
 }
 
-// 累乗消し: 下段の「素因数が1種類の数字」を消す。全部消えたらボーナスでターン消費なし
+// pⁿ消し: 下段の「素因数が1種類の数字」を消す。全部消えたらボーナスでターン消費なし
 async function firePrime() {
-  input = "";
-  picked = [];
-  typed = "";
+  [input, picked, typed] = ["", [], ""];
   const r = primeAttack(board);
+  stats.attack(r, board);
   combo = r.allHit ? combo + 1 : 0; // 全消しは settle の判定で 0 に戻す
   tally.attack(board, r.board, scoreFactor(active)); // 得点へは精算で足す
   const text = resultText(r, "下段に素因数が1種類の数字がない");
@@ -298,40 +308,31 @@ async function firePrime() {
   if (id !== game) return;
   showHits(hitTextEl, comboTextEl, r.hits, r.allHit, combo); // 全消しなら settle で Reset に置き換える
   await settle(r.board, r.removed, new Set(), !r.allHit, text, id);
-  if (id === game) [busy, pending] = [false, null];
+  if (id === game) { [busy, pending] = [false, null]; signals(); } // 入力待ちに戻ったら合図を付け直す
 }
 
 // エクストラの効果: ポイントを引いて盤面・予告を変える（extra.js の castSkill）。ターンは進まず得点なし。全消しの判定はいつもどおり
 async function useSkill(skill) {
-  const r = !busy && playing && castSkill(skill, { board, drops, points, turn, difficulty, active });
+  const r = !busy && playing && castSkill(skill, { board, drops, points, turn, difficulty, active, uses });
   if (!r) return;
-  ({ points, drops, active } = r);
+  ({ points, drops, active, uses } = r);
+  stats.skill(skill.name, r.pop.size);
   tally.factor = scoreFactor(active); // 得点2倍は使ったときの保留にも掛かる
   const id = game;
   busy = true;
-  pending = { next: r.board, advance: false, text: `${skill.name}を使った −${skill.cost}PP`, hits: 0, allHit: false, step: 0 };
+  pending = { next: r.board, advance: false, text: `${skill.name}を使った −${r.paid}PP`, hits: 0, allHit: false, step: 0 };
   setLabel(hitTextEl, "");
   render({ popAt: r.pop });
   if (r.pop.size > 0) await wait(EFFECT_MS);
   if (id !== game) return;
   await settle(r.board, r.fall ?? [], new Set(), false, pending.text, id);
-  if (id === game) [busy, pending] = [false, null];
+  if (id === game) { [busy, pending] = [false, null]; signals(); } // 入力待ちに戻ったら合図を付け直す
 }
 
 // 設定メニュー（⚙）: 開いているあいだは入力・攻撃を受け付けない。演出の続きは game の id で止める
 const menuEl = $("menu");
 const menuList = $("menu-list");
 const rulesEl = $("rules");
-const rulePages = [...rulesEl.querySelectorAll(".rule-page")];
-let rulePage = 0;
-// ルールはページ送り。最初のページで「前へ」、最後で「次へ」は押せない
-function showRule(i) {
-  rulePage = Math.max(0, Math.min(i, rulePages.length - 1));
-  rulePages.forEach((page, j) => (page.hidden = j !== rulePage));
-  $("rules-page").textContent = `${rulePage + 1}/${rulePages.length}`;
-  rulesEl.querySelector('[data-menu="rules-prev"]').disabled = rulePage === 0;
-  rulesEl.querySelector('[data-menu="rules-next"]').disabled = rulePage === rulePages.length - 1;
-}
 const supportConfirm = $("support-confirm");
 const newgameEl = $("newgame");
 const skillsEl = $("skills");
@@ -347,7 +348,7 @@ function showMenu(open, panel = "list") {
   newgameEl.hidden = panel !== "newgame";
   supportConfirm.hidden = panel !== "support";
   skillsEl.hidden = panel !== "skills";
-  if (panel === "skills") renderSkills($("skills-list"), { board, points, difficulty, active }, busy);
+  if (panel === "skills") renderSkills($("skills-list"), { board, points, turn, difficulty, active, uses }, busy);
   if (panel === "rules") showRule(0); // 開くたびに 1 ページ目から
   if (panel === "support") $("support-question").textContent = `サポートを ${support ? "OFF" : "ON"} にしますか？`;
 }
@@ -358,7 +359,12 @@ function finishNow() {
   pending = null;
   busy = false;
   factors = "";
-  if (!p || p.step >= 4) return render();
+  if (p?.lost || p?.won) { render(); return gameOver(p.won); } // 負け・クリアの演出中
+  if (p && p.step < 4) finishSteps(p);
+  else render();
+  if (playing && isClearTurn(turn, difficulty)) gameOver(true); // 101 になったらクリア
+}
+function finishSteps(p) {
   const level = levelAt(p.step >= 2 ? turn - 1 : turn, difficulty); // settle と同じ「進む前」のレベル
   if (p.step < 1) {
     board = p.next;
@@ -390,6 +396,7 @@ function showTitle() {
   difficultyEl.hidden = playing;
   startBtn.hidden = playing;
   overlay.hidden = false;
+  signals();
 }
 // タイトルへ: ゲームは捨てずに残す（演出中なら止めて結果の盤面にする）
 function toTitle() {
@@ -399,7 +406,7 @@ function toTitle() {
   overlayText.innerHTML = introText;
   showTitle();
 }
-const resume = () => { overlay.hidden = true; };
+const resume = () => { overlay.hidden = true; signals(); };
 $("menu-btn").addEventListener("click", () => showMenu(true));
 menuEl.addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-menu]");
@@ -407,7 +414,7 @@ menuEl.addEventListener("click", (e) => {
   if (!action) return;
   if (action === "rules" || action === "newgame" || action === "support") return showMenu(true, action);
   if (action === "back") return showMenu(!menuFromTitle);
-  if (action === "rules-prev" || action === "rules-next") return showRule(rulePage + (action === "rules-next" ? 1 : -1));
+  if (action === "rules-prev" || action === "rules-next") return turnRule(action === "rules-next" ? 1 : -1);
   showMenu(false);
   if (action === "support-apply") toggleSupport();
   else if (action === "restart") {
@@ -420,14 +427,9 @@ menuEl.addEventListener("click", (e) => {
 pointsBtn.addEventListener("click", () => showMenu(true, "skills"));
 $("resume").addEventListener("click", resume);
 // タイトルのニューゲームは設定メニューと同じ難易度選択の画面を使う
-$("title-newgame").addEventListener("click", () => {
-  showMenu(true, "newgame");
-  menuFromTitle = true;
-});
-$("title-rules").addEventListener("click", () => {
-  showMenu(true, "rules");
-  menuFromTitle = true;
-});
+for (const [id, panel] of [["title-newgame", "newgame"], ["title-rules", "rules"]]) {
+  $(id).addEventListener("click", () => { showMenu(true, panel); menuFromTitle = true; });
+}
 
 function press(key) {
   if (menuOpen() || !overlay.hidden) return;
@@ -487,10 +489,12 @@ document.addEventListener("keydown", (e) => {
   else if (/^[0-9]$/.test(e.key)) press(e.key);
   else if (e.key === "Backspace") press("back");
   else if (e.key === "*" || e.key === "x") press("times");
+  else if (e.key === "-" || e.key === "ー") press("prime");
   else if (e.key === "Enter") overlay.hidden ? press("attack") : playing ? resume() : start();
 });
 
 startBtn.addEventListener("click", start);
+initRecords(() => difficulty);
 buildPrimeKeys();
 showSupport();
 render();

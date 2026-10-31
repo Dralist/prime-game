@@ -1,5 +1,5 @@
 // エクストラモード: ポイント（大きい素数を割り取ると +1）と、ポイントで使う効果の表
-import { applyDrops, bigPrimes, factorize, hasBigPrime, isCleared, isEmpty, landDrops, levelAt, planDrops } from "./game.js?v=203224e0";
+import { applyDrops, bigPrimes, factorize, hasBigPrime, isCleared, isEmpty, landDrops, levelAt, planDrops } from "./game.js?v=d429c0b8";
 
 // 攻撃で大きい素数を割り取った（消えた場合も）下段の列 = ポイントになるマス（1マス 1PP）
 // r は numberAttack（steps）か primeAttack（removed）の結果。board は攻撃前の盤面
@@ -21,11 +21,12 @@ export const resetPoints = (board, difficulty) => resetCells(board, difficulty).
 // 変えるものだけ返す: board（変えた盤面）・removed（下段が消えた列）・gone（消えたマス [列, 段]。省略時は removed の下段）・drops（予告）。
 // 返さないものは変えない。usable(s) があれば、それが偽のとき押せない。
 // turns があれば数ターン続く効果: 使うと s.active[id] = turns（ターンが進むたびに nextTurn で1減る）。残りがある間は押せず、「mark 残り」を表示
+// streak: { window, add } があれば続けて使うと cost が上がる: 前回の使用から window ターン以内（0 = 同じターンだけ）なら cost + add × 続けた回数（priceOf）
 export const EXTRA_SKILLS = [
   {
     id: "sweep",
     name: "下段一掃",
-    cost: 3,
+    cost: 5,
     desc: "下段の数字をすべて消す",
     apply(board) {
       const removed = [];
@@ -41,6 +42,7 @@ export const EXTRA_SKILLS = [
     id: "reroll",
     name: "予告の引き直し",
     cost: 1,
+    streak: { window: 0, add: 1 },
     desc: "予告の列と数字を引き直す",
     apply(board, s, rng) {
       return { drops: planDrops(board, levelAt(s.turn, s.difficulty), s.difficulty, rng) };
@@ -64,9 +66,10 @@ export const EXTRA_SKILLS = [
     id: "dropStop",
     name: "落下止め",
     cost: 2,
-    turns: 2,
+    turns: 1,
+    streak: { window: 10, add: 1 },
     mark: "止",
-    desc: "2ターンの間、数字が落ちてこない",
+    desc: "次の1ターン、数字が落ちてこない",
     apply: () => ({}),
   },
   {
@@ -82,7 +85,14 @@ export const EXTRA_SKILLS = [
 ];
 
 const left = (s, id) => s.active?.[id] ?? 0; // 数ターン続く効果の残りターン数
-const canUse = (skill, s) => s.points >= skill.cost && left(s, skill.id) === 0 && (!skill.usable || skill.usable(s));
+// 続けて使った回数（s.uses[id] = { turn: 前回使ったターン, chain: そこまで続けた回数 }。window の外なら 0）
+const chainOf = (skill, s) => {
+  const u = s.uses?.[skill.id];
+  return skill.streak && u && s.turn - u.turn <= skill.streak.window ? u.chain : 0;
+};
+// いまの cost（streak がなければ基本の cost のまま）
+export const priceOf = (skill, s) => skill.cost + (skill.streak ? skill.streak.add * chainOf(skill, s) : 0);
+const canUse = (skill, s) => s.points >= priceOf(skill, s) && left(s, skill.id) === 0 && (!skill.usable || skill.usable(s));
 
 // ターンが1つ進んだときの盤面・予告・効果の残り（turn は進んだあと）。落下止めが残っていれば落とさず予告もそのまま。
 // landed: 落ちたマス [{ col, row, value }]。効果の残りはすべて1減り、0 になったものは消える
@@ -102,7 +112,7 @@ export const scoreFactor = (active) =>
 export const activeLabel = (active) =>
   EXTRA_SKILLS.filter((k) => k.turns && left({ active }, k.id) > 0).map((k) => [k.mark, `残${active[k.id]}`]);
 
-// activeLabel を効果ごとの小さな枠（チップ）にして el に入れる: [止 残2] [×2 残3]
+// activeLabel を効果ごとの小さな枠（チップ）にして el に入れる: [止 残1] [×2 残3]
 export function renderActive(el, active) {
   const span = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text });
   el.replaceChildren(...activeLabel(active).map(([mark, rest]) => {
@@ -112,7 +122,8 @@ export function renderActive(el, active) {
   }));
 }
 
-// 効果を使ったあとの状態（ポイントを引き、apply が返したものだけ置き換える）。使えないなら null。ターン・得点は変えない
+// 効果を使ったあとの状態（いまの cost = paid を引き、apply が返したものだけ置き換える）。使えないなら null。ターン・得点は変えない
+// uses: 使った記録を更新したもの（window の外なら chain を 1 から）
 // pop: はじけるマス "列,段"（使う前の段）。fall(列, 段): 使ったあとのマスが何段落ちるか（消えたマスがなければ null）
 export function castSkill(skill, s, rng = Math.random) {
   if (!skill || !canUse(skill, s)) return null;
@@ -127,10 +138,12 @@ export function castSkill(skill, s, rng = Math.random) {
   });
   const fall = gone.length > 0 ? (c, row) => falls[c][row] ?? 0 : null;
   const active = skill.turns ? { ...s.active, [skill.id]: skill.turns } : { ...s.active };
-  return { ...s, points: s.points - skill.cost, board: r.board ?? s.board, drops: r.drops ?? s.drops, active, removed, pop, fall };
+  const paid = priceOf(skill, s);
+  const uses = { ...s.uses, [skill.id]: { turn: s.turn, chain: chainOf(skill, s) + 1 } };
+  return { ...s, points: s.points - paid, paid, uses, board: r.board ?? s.board, drops: r.drops ?? s.drops, active, removed, pop, fall };
 }
 
-// 効果の一覧（設定メニューと同じ重ね方の #skills）。使えない効果（ポイント不足・残りあり など）と演出中は押せない。s = { board, points, difficulty, active }
+// 効果の一覧（設定メニューと同じ重ね方の #skills）。使えない効果（ポイント不足・残りあり など）と演出中は押せない。s = { board, points, turn, difficulty, active, uses }
 export function renderSkills(listEl, s, busy) {
   listEl.replaceChildren(...EXTRA_SKILLS.map((k) => {
     const b = document.createElement("button");
@@ -140,7 +153,7 @@ export function renderSkills(listEl, s, busy) {
     b.disabled = busy || !canUse(k, s);
     // 1行目: 名前と右に cost、2行目: 説明（小さめ・薄め）
     const part = (cls, text) => Object.assign(document.createElement("span"), { className: cls, textContent: text });
-    b.append(part("skill-name", k.name), part("skill-cost", `${k.cost}PP`), part("skill-desc", k.desc));
+    b.append(part("skill-name", k.name), part("skill-cost", `${priceOf(k, s)}PP`), part("skill-desc", k.desc));
     return b;
   }));
 }

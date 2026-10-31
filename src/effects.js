@@ -1,10 +1,10 @@
 // 演出（弾・光・バッジ・はじけ・揺れ・落下・HIT/Combo の見せ方）。ゲームの状態は持たない
-import { factorize } from "./game.js?v=203224e0";
-import { MARKS, marksFor } from "./marks.js?v=203224e0";
+import { factorize } from "./game.js?v=d429c0b8";
+import { MARKS, marksFor } from "./marks.js?v=d429c0b8";
 
 // 演出の時間。どれも動いている間は攻撃を受け付けない（数字の入力はできる）
 export const STEP_MS = 340; // 弾が1列進む時間。空の列も同じ時間で通るので等速に見える
-export const PRIME_STEP_MS = 220; // 累乗消しの光が1列進む時間。バッジの「2³」は光が過ぎても落下の描画まで残る
+export const PRIME_STEP_MS = 220; // pⁿ消しの光が1列進む時間。バッジの「2³」は光が過ぎても落下の描画まで残る
 export const EFFECT_MS = 550; // 割り算・はじけるエフェクト（style.css の --fx と合わせる）
 export const SETTLE_PAUSE_MS = 300; // 攻撃のエフェクトが終わってから落下を始めるまでの間（何が起きたか見せる）
 export const FALL_MS = 420; // 落下の時間。落ちる段数に関係なく一定で、1回の落下で動くマスは同時に止まる
@@ -22,7 +22,7 @@ export function formatFactors(n) {
   return `${n} = ${[...f].map(([p, e]) => power(p, e)).join("×")}`;
 }
 
-// 素数のべき → "2³"（累乗消しのバッジ）
+// 素数のべき → "2³"（pⁿ消しのバッジ）
 export const formatPower = (n) => [...factorize(n)].map(([p, e]) => power(p, e)).join("×");
 
 // fx（どれも省略可）:
@@ -38,6 +38,7 @@ export const formatPower = (n) => [...factorize(n)].map(([p, e]) => power(p, e))
 //   fall: (列, 段) → 何段分上から落ちてくるか（0 なら動かない）
 //   delay: Map<列, ms> … 下段のエフェクトを遅らせる（弾が届いた時に効かせる）
 export function drawBoard(boardEl, board, COLS, ROWS, fx = {}) {
+  boardEl.classList.remove("lost"); // 負けの演出（loseFx）を消す
   const cells = [];
   const badges = [];
   const ppFloats = [];
@@ -130,7 +131,7 @@ export function numberFx(steps, pp = []) {
   return { badge, pop, pass, delay, bump, pp: new Set(pp) };
 }
 
-// 累乗消しの fx: 光が届いたマスから、消える数字は「2³」を出してはじけ、残る数字は揺れる
+// pⁿ消しの fx: 光が届いたマスから、消える数字は「2³」を出してはじけ、残る数字は揺れる
 export const arrivePrime = (c) => (c + 1) * PRIME_STEP_MS;
 export function primeFx(board, removed, COLS, pp = []) {
   const pop = new Set(removed);
@@ -181,7 +182,7 @@ export function fitStatus(statusEl, stockEl) {
 // 攻撃のエフェクトが終わったら「3 HIT」「All HIT!」を出す。All HIT が続いたら「2 Combo」…
 // 全消しは showReset を出す（倍率では All HIT として数える）。All HIT でない攻撃で Combo は 0 に戻り、表示も消える（combo は攻撃時に数え直してある）
 export function showHits(hitEl, comboEl, hits, allHit, combo) {
-  hitEl.classList.remove("reset", "noline", "over");
+  hitEl.classList.remove("reset", "noline", "over", "clear");
   setLabel(hitEl, allHit ? "All HIT!" : hits > 0 ? `${hits} HIT` : "");
   hitEl.classList.toggle("all", allHit);
   if (combo >= 2) setLabel(comboEl, `${combo} Combo`);
@@ -191,18 +192,63 @@ export function showHits(hitEl, comboEl, hits, allHit, combo) {
 // 全消し: HIT の場所に「One line Reset +1234pt」など（bonus = そのターンに精算した点）を大きく出し、Combo 表示を消す
 export function showReset(hitEl, comboEl, empty, bonus) {
   setLabel(hitEl, `${empty ? "No" : "One"} line Reset +${bonus}pt`);
-  hitEl.classList.remove("over");
-  hitEl.classList.remove("all");
+  hitEl.classList.remove("over", "clear", "all");
   hitEl.classList.add("reset");
   hitEl.classList.toggle("noline", empty);
   setLabel(comboEl, "");
 }
 
-// ターンが OVER_TURN を超えたとき HIT の場所に「Over turn」を1回出す（次の攻撃の HIT で消える）
-export function showOverTurn(hitEl) {
+// ずっと出す合図（<html> のクラス。style.css）: danger = 埋まる直前（入力待ちで予告の個数 ≥ 空きマス数・落下止めなし）→ 盤面の下から赤く点滅・予告が速く点滅、
+// over-turn = Over turn 中 → 背景が暗い赤・予告が少し速く点滅、drop-stop = 落下止め中 → 予告は点滅しない
+export function showSignals({ board, drops, active, rows, waiting, over }) {
+  const stop = (active.dropStop ?? 0) > 0;
+  const empty = board.reduce((n, col) => n + rows - col.length, 0);
+  const cl = document.documentElement.classList;
+  cl.toggle("danger", waiting && !stop && drops.length >= empty);
+  cl.toggle("over-turn", over);
+  cl.toggle("drop-stop", stop);
+}
+
+// ターンが OVER_TURN を超えたとき（約 1.5 秒、style.css の .over-band など）: 赤い帯が盤面を横切り、止まって「Over turn」を読ませてから抜ける・
+// 画面の縁が赤く光る・Turn が赤く脈打つ → HIT の場所に「Over turn」が縮んで残る（次の攻撃の HIT で消える）。入力は止めない
+// clear = true はクリア（エクストラ以外の 100 ターン）: 同じ演出を「Clear!」・明るい黄（.clear）で出す
+export const OVER_FX_MS = 1500;
+export function showOverTurn(hitEl, boardEl, turnEl, clear = false) {
+  const text = clear ? "Clear!" : "Over turn", cls = clear ? " clear" : "";
   hitEl.classList.remove("all", "reset", "noline");
   hitEl.classList.add("over");
-  setLabel(hitEl, "Over turn");
+  hitEl.classList.toggle("clear", clear);
+  setLabel(hitEl, text);
+  const band = Object.assign(document.createElement("div"), { className: `over-band${cls}`, textContent: text });
+  const edge = Object.assign(document.createElement("div"), { className: `over-edge${cls}` });
+  edge.setAttribute("aria-hidden", "true");
+  boardEl.append(band); // 盤面の描き直し（replaceChildren）でも消える
+  document.body.append(edge);
+  turnEl.classList.remove("over-pulse");
+  void turnEl.offsetWidth;
+  turnEl.classList.add("over-pulse");
+  setTimeout(() => { band.remove(); edge.remove(); turnEl.classList.remove("over-pulse"); }, OVER_FX_MS);
+}
+
+// クリアの演出（showOverTurn の黄色版）を見せきったら true。alive() が false になったら（タイトルへ・ニューゲーム）やめる
+export async function clearFx(hitEl, boardEl, turnEl, alive) {
+  document.documentElement.classList.remove("danger", "over-turn");
+  showOverTurn(hitEl, boardEl, turnEl, true);
+  await wait(OVER_FX_MS);
+  return alive();
+}
+
+// 負けの演出: 最後の落下を見せたあと、盤面が薄い赤でゆっくり点滅 → マスが灰色に沈む → 盤面の上に「Game Over」（style.css の .lost）。
+// alive() が false になったら（タイトルへ・ニューゲーム）やめる。最後まで見せたら true
+export const LOSE_MS = 1500;
+export async function loseFx(boardEl, alive) {
+  document.documentElement.classList.remove("danger", "over-turn"); // 負けの演出が始まったら合図は消す
+  await wait(FALL_MS);
+  if (!alive()) return false;
+  boardEl.classList.add("lost");
+  boardEl.append(Object.assign(document.createElement("div"), { className: "game-over", textContent: "Game Over" }));
+  await wait(LOSE_MS);
+  return alive();
 }
 
 // 下段の位置（盤面の中の座標）。x(c) は列 c の中心で、盤面の外（c < 0, c >= COLS）にも延ばせる
@@ -242,7 +288,7 @@ export function shoot(boardEl, COLS, ROWS, n, steps) {
   }
 }
 
-// 累乗消しの光: 下段を左外から右外まで等速で走る。列 c には (c+1)*PRIME_STEP_MS で届く
+// pⁿ消しの光: 下段を左外から右外まで等速で走る。列 c には (c+1)*PRIME_STEP_MS で届く
 export function sweep(boardEl, COLS, ROWS) {
   const row = bottomRow(boardEl, COLS, ROWS);
   const beam = document.createElement("div");

@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="素数ゲーム">
   <meta name="theme-color" content="#111827">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="src/style.css?v=203224e0">
+  <link rel="stylesheet" href="src/style.css?v=d429c0b8">
   <title>素数ゲーム</title>
 </head>
 <body>
@@ -61,13 +61,13 @@
       </div>
       <div class="attack-row">
       <button type="button" data-key="attack" class="attack">割る</button>
-      <button type="button" data-key="prime" class="prime">累乗消し</button>
+      <button type="button" data-key="prime" class="prime">pⁿ消し</button>
       </div>
     </div>
 
     <section id="overlay" class="overlay">
       <h1>素数ゲーム</h1>
-      <p id="overlay-text" class="hint">下段の数字を左から割っていこう。<br>1 になった数字は消えて上が落ちる。<br>盤面が埋まったら負け！</p>
+      <div id="overlay-text" class="hint">下段の数字を左から割っていこう。<br>1 になった数字は消えて上が落ちる。<br>盤面が埋まったら負け！<br>100 ターン耐えたらクリア（エクストラ以外）。</div>
       <div id="difficulty" class="difficulty" role="group" aria-label="難易度">
         <button type="button" data-diff="easy">やさしい</button>
         <button type="button" data-diff="normal">ふつう</button>
@@ -81,7 +81,25 @@
         <button type="button" id="title-newgame">ニューゲーム</button>
       </div>
       <!-- 3つのタイトルとも。設定メニューと同じルールのページを開き、戻るでタイトルへ -->
-      <button type="button" id="title-rules" class="title-rules">ルール</button>
+      <div class="title-row">
+        <button type="button" id="title-rules" class="title-rules">ルール</button>
+        <button type="button" id="title-records" class="title-rules">記録</button>
+      </div>
+    </section>
+
+    <!-- 自分の記録（タイトルの「記録」）: 難易度ごとの上位10件。開くといまの難易度。records.js が描く -->
+    <section id="records" class="overlay menu" role="dialog" aria-label="記録" hidden>
+      <div class="menu-list records">
+        <h2>記録</h2>
+        <div class="rec-tabs" role="group" aria-label="記録の難易度">
+          <button type="button" data-rec="easy">やさしい</button>
+          <button type="button" data-rec="normal">ふつう</button>
+          <button type="button" data-rec="hard">むずかしい</button>
+          <button type="button" data-rec="extra">エクストラ</button>
+        </div>
+        <div id="records-body" class="rec-body"></div>
+        <button type="button" id="records-back">戻る</button>
+      </div>
     </section>
 
     <!-- 設定メニュー（⚙）: 開いているあいだは入力・攻撃を受け付けない -->
@@ -126,6 +144,7 @@
             <li>攻撃できるのは各列の<b>一番下の数字</b>だけ。</li>
             <li>数字は 1 になると消え、上の数字が1つ落ちる。</li>
             <li>ターンが進むと上から数字が降ってくる。落ちたあとに<b>全マスが埋まったら負け</b>。</li>
+            <li>エクストラ以外は<b>100 ターン耐えたらクリア</b>。クリアした難易度のボタンに★が付く。</li>
           </ul>
         </section>
         <section class="rule-page" hidden>
@@ -140,20 +159,20 @@
           </ul>
         </section>
         <section class="rule-page" hidden>
-          <h2>累乗消し</h2>
+          <h2>pⁿ消し</h2>
           <ul>
-            <li><b>累乗消し</b>を押すと、下段の<b>素因数が1種類の数字</b>（2, 4, 8, 9, 25 など）をすべて消す。</li>
+            <li><b>pⁿ消し</b>を押すと、下段の<b>素因数が1種類の数字</b>（2, 4, 8, 9, 25 など）をすべて消す。</li>
             <li>回数は無制限。ただし1ターン使う。</li>
-            <li>ときどき降ってくる大きい素数（やさしいなら 11〜97）も、数字キーボードで打つか累乗消しで消せる。</li>
+            <li>ときどき降ってくる大きい素数（やさしいなら 11〜97）も、数字キーボードで打つか pⁿ消しで消せる。</li>
           </ul>
         </section>
         <section class="rule-page" hidden>
           <h2>ターンと予告</h2>
           <ul>
             <li>攻撃は当たっても外れても<b>1ターン</b>。</li>
-            <li>割るで下段の全部に当たったとき、累乗消しで下段が全部消えたときは<b>ターンが進まない</b>。</li>
+            <li>割るで下段の全部に当たったとき、pⁿ消しで下段が全部消えたときは<b>ターンが進まない</b>。</li>
             <li>次に降る列と数字は盤面の上の<b>予告欄</b>に出る。その列が満杯なら近くの空いている列に落ちる。</li>
-            <li>9 ターンごとにレベルが上がり、降る数と敵の素因数が増える（Lv 5 で止まる）。エクストラは Lv 5 から 100 ターンで Lv 7、さらに 30 ターンで Lv 10 まで少しずつ上がる。</li>
+            <li>9 ターンごとにレベルが上がり、降る数と敵の素因数が増える（Lv 5 で止まる）。エクストラは Lv 5 から 100 ターンで Lv 7、さらに 50 ターンで Lv 10 まで少しずつ上がる。</li>
           </ul>
         </section>
         <section class="rule-page" hidden>
@@ -182,13 +201,13 @@
         <section class="rule-page" hidden>
           <h2>エクストラ</h2>
           <ul>
-            <li>Lv 5 から始まり、100 ターンで Lv 7、さらに 30 ターンで Lv 10 まで少しずつ上がる（降る数が増える分、大きい素数は混ざりにくくなる）。</li>
+            <li>Lv 5 から始まり、100 ターンで Lv 7、さらに 50 ターンで Lv 10 まで少しずつ上がる（降る数が増える分、大きい素数は混ざりにくくなる）。</li>
             <li><b>PP</b>（Prime point）をためる: 大きい素数を割り取ると 1PP（消えなくても）。One line Reset では、残った数字のうち大きい素数入りの数だけ。</li>
             <li>「PP n」のボタンで<b>効果</b>を使う。PP を払い、ターンは進まず点も入らない。</li>
-            <li>下段一掃（3PP）: 下段の数字をすべて消す</li>
-            <li>予告の引き直し（1PP）: 予告の列と数字を引き直す</li>
+            <li>下段一掃（5PP）: 下段の数字をすべて消す</li>
+            <li>予告の引き直し（1PP。同じターンに続けて使うと 1PP ずつ上がる）: 予告の列と数字を引き直す</li>
             <li>大きい素数崩し（1PP）: 盤面の大きい素数をすべて割り取る（PP なし）</li>
-            <li>落下止め（2PP）: 2ターンの間、数字が落ちてこない</li>
+            <li>落下止め（2PP。前回から 10 ターン以内に使うと 1PP ずつ上がる）: 次の1ターン、数字が落ちてこない</li>
             <li>得点2倍（2PP）: 3ターンの間、入る点が2倍（いまの保留も）</li>
           </ul>
         </section>
@@ -210,6 +229,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="src/main.js?v=203224e0"></script>
+  <script type="module" src="src/main.js?v=d429c0b8"></script>
 </body>
 </html>
