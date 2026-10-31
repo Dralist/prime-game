@@ -408,6 +408,7 @@ html.over-turn, html.over-turn body { background: #2a1015; }
 
 .title-rules { padding: 10px 32px; border: 2px solid var(--panel); border-radius: 999px; background: none; color: var(--fg); font-size: 1rem; font-weight: 700; }
 .title-row { display: flex; gap: 12px; }
+.ver { color: var(--muted); font-size: 0.75rem; }
 /* 記録: 難易度タブ・表（順位／得点／ターン／日付。サポートで遊んだ行は得点の右に小さな S） */
 .records { width: min(100%, 340px); }
 #records { background: var(--bg); } /* 後ろのタイトル・盤面を透かさない */

@@ -1,5 +1,5 @@
 // 1ゲームの集計（純粋）と、負け・クリアのあとの結果（タイトルの #overlay-text）の描画
-import { rankText } from "./records.js?v=d429c0b8";
+import { rankText } from "./records.js?v=11338ed3";
 
 // 攻撃で割り取った log₂(前÷後) のマスごとの合計（倍率なし。消えたマスは後 = 1。得点の積み立てと同じ見方）
 export function attackLog2(before, after) {

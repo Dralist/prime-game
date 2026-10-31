@@ -2,17 +2,17 @@
 import {
   DIFFICULTIES, maxLevel, maxAttack, numberAttack, primeAttack,
   isOverTurn, isClearTurn, OVER_TURN, levelAt, initialBoard, planDrops, isFull, isCleared, isEmpty, blockedPrimes,
-} from "./game.js?v=d429c0b8";
-import { marksFor, setMarkDifficulty } from "./marks.js?v=d429c0b8";
+} from "./game.js?v=11338ed3";
+import { marksFor, setMarkDifficulty } from "./marks.js?v=11338ed3";
 import {
   SETTLE_PAUSE_MS, EFFECT_MS, FALL_MS, wait, formatFactors, drawBoard, drawPreview, primeKeyButtons, numberFx, primeFx,
   arriveNumber, arrivePrime, setLabel, setStock, fitStatus, showHits, showReset, showOverTurn, clearFx, shoot, sweep, loseFx, showSignals,
-} from "./effects.js?v=d429c0b8";
-import { EXTRA_SKILLS, pointCols, resetCells, resetPoints, renderSkills, castSkill, nextTurn, renderActive, scoreFactor } from "./extra.js?v=d429c0b8";
-import { Tally } from "./score.js?v=d429c0b8";
-import { addRecord, initRecords } from "./records.js?v=d429c0b8";
-import { Stats, showResult, endResult } from "./stats.js?v=d429c0b8";
-import { showRule, turnRule } from "./rules.js?v=d429c0b8";
+} from "./effects.js?v=11338ed3";
+import { EXTRA_SKILLS, pointCols, resetCells, resetPoints, renderSkills, castSkill, nextTurn, renderActive, scoreFactor } from "./extra.js?v=11338ed3";
+import { Tally } from "./score.js?v=11338ed3";
+import { addRecord, initRecords } from "./records.js?v=11338ed3";
+import { Stats, showResult, endResult } from "./stats.js?v=11338ed3";
+import { showRule, turnRule } from "./rules.js?v=11338ed3";
 
 const STORAGE_KEY = "prime-game-difficulty";
 const SUPPORT_KEY = "prime-game-support"; // サポートモード（素因数マーク）の ON/OFF

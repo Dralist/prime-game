@@ -1,5 +1,5 @@
 // 得点: 攻撃ごとに積み立て、ターンが進む・全消し・負けのときに精算して得点へ足す
-import { stockFor, resetStock, breakMultiplier, payout, isEmpty, MAX_BREAK_MULTIPLIER } from "./game.js?v=d429c0b8";
+import { stockFor, resetStock, breakMultiplier, payout, isEmpty, MAX_BREAK_MULTIPLIER } from "./game.js?v=11338ed3";
 
 export class Tally {
   constructor(cols) {

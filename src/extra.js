@@ -1,5 +1,5 @@
 // エクストラモード: ポイント（大きい素数を割り取ると +1）と、ポイントで使う効果の表
-import { applyDrops, bigPrimes, factorize, hasBigPrime, isCleared, isEmpty, landDrops, levelAt, planDrops } from "./game.js?v=d429c0b8";
+import { applyDrops, bigPrimes, factorize, hasBigPrime, isCleared, isEmpty, landDrops, levelAt, planDrops } from "./game.js?v=11338ed3";
 
 // 攻撃で大きい素数を割り取った（消えた場合も）下段の列 = ポイントになるマス（1マス 1PP）
 // r は numberAttack（steps）か primeAttack（removed）の結果。board は攻撃前の盤面

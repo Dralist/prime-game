@@ -1,6 +1,6 @@
 // 演出（弾・光・バッジ・はじけ・揺れ・落下・HIT/Combo の見せ方）。ゲームの状態は持たない
-import { factorize } from "./game.js?v=d429c0b8";
-import { MARKS, marksFor } from "./marks.js?v=d429c0b8";
+import { factorize } from "./game.js?v=11338ed3";
+import { MARKS, marksFor } from "./marks.js?v=11338ed3";
 
 // 演出の時間。どれも動いている間は攻撃を受け付けない（数字の入力はできる）
 export const STEP_MS = 340; // 弾が1列進む時間。空の列も同じ時間で通るので等速に見える
